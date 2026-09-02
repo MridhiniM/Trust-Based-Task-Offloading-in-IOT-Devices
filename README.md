@@ -1,6 +1,6 @@
 # Trust-Based Task Offloading Framework (TBTOF)
 
-**[Live interactive demo →](https://frontend-navy-delta-98.vercel.app)** (frontend on Vercel, simulator API on Railway — the demo runs the actual simulator live, nothing is precomputed)
+**[Live interactive demo →](https://trust-based-task-offloading-in-iot-devices-mridhini.vercel.app)** (frontend on Vercel, simulator API on Railway — the demo runs the actual simulator live, nothing is precomputed)
 
 A working implementation of the trust engine, orchestrator, and simulator described in
 *"Trust-Based Task Offloading Framework for Edge-Based IoT Systems"* (Anitha H.M., Nalina V.,
