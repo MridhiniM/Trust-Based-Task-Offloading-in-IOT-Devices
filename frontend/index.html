@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TBTOF — Trust-Based Task Offloading</title>
+  <meta name="description" content="Interactive demo of a trust-based task offloading framework for edge/IoT networks." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">Edge Computing &middot; IoT &middot; Trust Management</p>
+      <h1>Trust-Based Task Offloading Framework</h1>
+      <p class="lede">
+        A live simulator for a trust-aware edge orchestrator: nodes are scored on task success rate,
+        CPU availability, latency, and uptime; an asymmetric update rule (reward small, punish hard)
+        quarantines misbehaving nodes before they can cause lasting damage. This page runs the actual
+        simulator on every request — nothing here is precomputed.
+      </p>
+      <div class="hero-links">
+        <a href="https://github.com/MridhiniM/Trust-Based-Task-Offloading-in-IOT-Devices" target="_blank" rel="noopener">GitHub Repo</a>
+        <a href="https://github.com/MridhiniM/Trust-Based-Task-Offloading-in-IOT-Devices#readme" target="_blank" rel="noopener">Read the write-up</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <section class="panel" id="simulate-panel">
+      <h2>Try it yourself</h2>
+      <p class="panel-desc">Configure a scenario and run the trust-based scheduler against a random baseline, live.</p>
+
+      <form id="simulate-form" class="controls">
+        <label>Nodes
+          <input type="number" id="n_nodes" value="100" min="1" max="500" />
+        </label>
+        <label>Tasks
+          <input type="number" id="n_tasks" value="10000" min="1" max="20000" step="500" />
+        </label>
+        <label>Malicious nodes (%)
+          <input type="number" id="malicious_pct" value="10" min="0" max="100" />
+        </label>
+        <label>Trust threshold (τ)
+          <input type="number" id="tau_threshold" value="0.55" min="0" max="1" step="0.01" />
+        </label>
+        <button type="submit" id="run-btn">Run Simulation</button>
+      </form>
+
+      <div id="simulate-status" class="status" hidden></div>
+
+      <div id="simulate-results" class="results" hidden>
+        <table class="results-table">
+          <thead>
+            <tr><th>Metric</th><th>Trust-Based</th><th>Random Baseline</th></tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Latency CDF</h3>
+            <canvas id="cdf-chart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>Normalized Energy-Delay Product</h3>
+            <canvas id="edp-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="threshold-panel">
+      <h2>Experiment A: Threshold Sensitivity</h2>
+      <p class="panel-desc">
+        Sweeps the trust threshold and plots overall task success rate — computed live, not
+        a static image. Under the asymmetric update rule, a misbehaving node's trust collapses
+        within a handful of tasks regardless of where the threshold sits, so expect a flat
+        plateau rather than the paper's stylized bell curve, with a sharp cliff only once the
+        threshold exceeds what real hardware can reach.
+      </p>
+      <button id="threshold-rerun" class="secondary-btn">Re-run</button>
+      <div class="chart-card wide">
+        <canvas id="threshold-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel" id="saturation-panel">
+      <h2>Experiment D: Resilience to Saturation</h2>
+      <p class="panel-desc">
+        Fixes a 500-node population and sweeps the fraction of malicious nodes from 0% to 50%,
+        comparing overall success rate between the trust-based scheduler and the random baseline.
+      </p>
+      <button id="saturation-rerun" class="secondary-btn">Re-run</button>
+      <div class="chart-card wide">
+        <canvas id="saturation-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel" id="about-panel">
+      <h2>How it works</h2>
+      <div class="about-grid">
+        <div>
+          <h3>Trust score</h3>
+          <p>τ = 0.35·SR + 0.25·CPU + 0.20·Latency + 0.20·Uptime, seeded per node from its hardware profile.</p>
+        </div>
+        <div>
+          <h3>Asymmetric update</h3>
+          <p>+0.025 per success, −0.045 per failure — reward slowly, punish hard, so misbehaving nodes can't linger.</p>
+        </div>
+        <div>
+          <h3>Quarantine</h3>
+          <p>Once τ &lt; 0.55 a node is permanently excluded — an absorbing state, proven via a discrete-time Markov chain.</p>
+        </div>
+      </div>
+      <p class="about-footer">
+        Full equations, design-choice writeups, and the honest-results discussion (including why
+        this simulation's Experiment A differs in shape from the paper's) are in the
+        <a href="https://github.com/MridhiniM/Trust-Based-Task-Offloading-in-IOT-Devices#readme" target="_blank" rel="noopener">repo README</a>.
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">Built from the paper "Trust-Based Task Offloading Framework for Edge-Based IoT Systems."</div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

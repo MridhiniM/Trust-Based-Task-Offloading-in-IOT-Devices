@@ -1,5 +1,7 @@
 # Trust-Based Task Offloading Framework (TBTOF)
 
+**[Live interactive demo →](https://frontend-navy-delta-98.vercel.app)** (frontend on Vercel, simulator API on Railway — the demo runs the actual simulator live, nothing is precomputed)
+
 A working implementation of the trust engine, orchestrator, and simulator described in
 *"Trust-Based Task Offloading Framework for Edge-Based IoT Systems"* (Anitha H.M., Nalina V.,
 Madhusudan, Shakthi, S.P.). It scores edge nodes on task success rate, CPU availability,
@@ -91,6 +93,8 @@ trust_offload/       core package: trust scoring, node model, orchestrator, base
 experiments/         one script per paper figure (A-D) + run_all.py for the full sweep
 tests/                pytest suite covering the trust formula, asymmetric update, quarantine, and the k=10 bound
 results/              generated PNGs (git-tracked; regenerate anytime with run_all.py)
+backend/              FastAPI wrapper around trust_offload (deployed to Railway) powering the live demo
+frontend/             static HTML/JS site (Chart.js, no build step; deployed to Vercel) -- the live demo
 ```
 
 ## Running it
@@ -103,9 +107,12 @@ pytest                          # unit tests
 python experiments/run_all.py   # aggregate comparison + all 4 experiment plots -> results/
 ```
 
+To run the web demo locally: `uvicorn backend.main:app --reload --port 8123`, then open
+`frontend/index.html` with `API_BASE_URL` pointed at `http://localhost:8123`.
+
 ## Scope
 
 This covers the trust engine, orchestrator, Markov-chain validation, simulator, and all four
-paper experiments (Sections III-IX). It does not implement the interactive JS dashboard /
-live 1Hz charts described in Section VIII -- that's a possible follow-up once the core engine
-is settled.
+paper experiments (Sections III-IX), plus a live interactive demo (`backend/` + `frontend/`)
+replacing the paper's proposed 1Hz JS dashboard (Section VIII) with an on-demand version:
+every chart is computed by a real simulation run on request, not precomputed or 1Hz-streamed.
