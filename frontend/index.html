@@ -27,27 +27,50 @@
 
   <main class="container">
 
-    <section class="panel" id="simulate-panel">
-      <h2>Try it yourself</h2>
-      <p class="panel-desc">Configure a scenario and run the trust-based scheduler against a random baseline, live.</p>
+    <section class="panel" id="live-panel">
+      <h2>Watch the Orchestrator in Action</h2>
+      <p class="panel-desc">
+        Each edge node is a box around the central Trust Orchestrator. Watch task packets fly out,
+        trust scores shift after every outcome, and misbehaving nodes gray out into permanent
+        quarantine — all computed live, one dispatch at a time, by the actual simulator.
+      </p>
 
-      <form id="simulate-form" class="controls">
-        <label>Nodes
-          <input type="number" id="n_nodes" value="100" min="1" max="500" />
-        </label>
-        <label>Tasks
-          <input type="number" id="n_tasks" value="10000" min="1" max="20000" step="500" />
-        </label>
-        <label>Malicious nodes (%)
-          <input type="number" id="malicious_pct" value="10" min="0" max="100" />
-        </label>
-        <label>Trust threshold (τ)
-          <input type="number" id="tau_threshold" value="0.55" min="0" max="1" step="0.01" />
-        </label>
-        <button type="submit" id="run-btn">Run Simulation</button>
+      <form id="live-form" class="controls viz-controls-row">
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <label>Nodes
+            <input type="number" id="live_n_nodes" value="20" min="6" max="36" />
+          </label>
+          <label>Tasks
+            <input type="number" id="live_n_tasks" value="300" min="10" max="1500" step="10" />
+          </label>
+          <label>Malicious nodes (%)
+            <input type="number" id="live_malicious_pct" value="20" min="0" max="100" />
+          </label>
+          <label>Trust threshold (τ)
+            <input type="number" id="live_tau_threshold" value="0.55" min="0" max="1" step="0.01" />
+          </label>
+          <label>Speed
+            <select id="live_speed">
+              <option value="450">Slow</option>
+              <option value="200" selected>Normal</option>
+              <option value="60">Fast</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" id="live-run-btn">Run Live Simulation</button>
       </form>
 
-      <div id="simulate-status" class="status" hidden></div>
+      <div id="live-status" class="status" hidden></div>
+
+      <div class="live-stats" id="live-stats" hidden>
+        <div>Task <strong id="stat-task">0 / 0</strong></div>
+        <div>Running Success Rate <strong id="stat-success">—</strong></div>
+        <div>Nodes Quarantined <strong id="stat-quarantined">0</strong></div>
+      </div>
+
+      <div class="network-viz" id="network-viz">
+        <div class="hub">Trust<br />Orchestrator</div>
+      </div>
 
       <div id="simulate-results" class="results" hidden>
         <table class="results-table">
@@ -74,10 +97,11 @@
       <h2>Experiment A: Threshold Sensitivity</h2>
       <p class="panel-desc">
         Sweeps the trust threshold and plots overall task success rate — computed live, not
-        a static image. Under the asymmetric update rule, a misbehaving node's trust collapses
-        within a handful of tasks regardless of where the threshold sits, so expect a flat
-        plateau rather than the paper's stylized bell curve, with a sharp cliff only once the
-        threshold exceeds what real hardware can reach.
+        a static image. Success rate rises gradually as the threshold increases (a low
+        threshold measurably costs you, since misbehaving nodes keep getting some traffic for
+        as long as they stay eligible), then falls off a cliff once the threshold exceeds what
+        real hardware can reach and the eligible node pool collapses. Not the paper's
+        symmetric bell curve, but a genuine sensitivity curve rather than a flat line.
       </p>
       <button id="threshold-rerun" class="secondary-btn">Re-run</button>
       <div class="chart-card wide">

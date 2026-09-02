@@ -5,6 +5,10 @@ const CHART_COLORS = {
   baseline: "#ff6b6b",
 };
 
+// Mirrors trust_offload/trust.py's TRUSTED_CUTOFF / QUARANTINE_CUTOFF.
+const TRUSTED_CUTOFF = 0.75;
+const QUARANTINE_CUTOFF = 0.55;
+
 let cdfChart, edpChart, thresholdChart, saturationChart;
 
 async function fetchJSON(path, options) {
@@ -101,40 +105,174 @@ function renderEdpChart(data) {
   });
 }
 
-async function runSimulation(event) {
-  event.preventDefault();
-  const statusEl = document.getElementById("simulate-status");
-  const resultsEl = document.getElementById("simulate-results");
-  const runBtn = document.getElementById("run-btn");
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  const body = {
-    n_nodes: Number(document.getElementById("n_nodes").value),
-    n_tasks: Number(document.getElementById("n_tasks").value),
-    malicious_fraction: Number(document.getElementById("malicious_pct").value) / 100,
-    tau_threshold: Number(document.getElementById("tau_threshold").value),
+function nodeStateClass(trust, quarantined) {
+  if (quarantined) return "quarantined";
+  if (trust >= TRUSTED_CUTOFF) return "trusted";
+  if (trust >= QUARANTINE_CUTOFF) return "suspicious";
+  return "quarantined";
+}
+
+function layoutNodes(nodeSummaries) {
+  const container = document.getElementById("network-viz");
+  container.querySelectorAll(".node-box, .connector").forEach((el) => el.remove());
+
+  const rect = container.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  const radius = Math.min(cx, cy) * 0.78;
+  const n = nodeSummaries.length;
+
+  const positions = {};
+  const nodeBoxEls = {};
+
+  nodeSummaries.forEach((node, i) => {
+    const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
+    positions[node.node_id] = { x, y };
+
+    const dx = x - cx;
+    const dy = y - cy;
+    const connector = document.createElement("div");
+    connector.className = "connector";
+    connector.style.width = `${Math.hypot(dx, dy)}px`;
+    connector.style.left = `${cx}px`;
+    connector.style.top = `${cy}px`;
+    connector.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
+    container.appendChild(connector);
+
+    const box = document.createElement("div");
+    box.className = `node-box ${nodeStateClass(node.initial_trust, false)}`;
+    box.style.left = `${x}px`;
+    box.style.top = `${y}px`;
+    box.innerHTML = `<div class="node-id">${node.node_id}</div><div class="node-trust">τ=${node.initial_trust.toFixed(2)}</div>`;
+    container.appendChild(box);
+    nodeBoxEls[node.node_id] = box;
+  });
+
+  return { positions, nodeBoxEls, hubPos: { x: cx, y: cy } };
+}
+
+async function animatePacket(ev, positions, hubPos, nodeBoxEls, container, flightMs) {
+  const pos = positions[ev.node_id];
+  if (!pos) return;
+
+  const packet = document.createElement("div");
+  packet.className = `packet${ev.success ? "" : " fail"}`;
+  packet.style.transition = `left ${flightMs}ms linear, top ${flightMs}ms linear`;
+  packet.style.left = `${hubPos.x}px`;
+  packet.style.top = `${hubPos.y}px`;
+  container.appendChild(packet);
+  packet.getBoundingClientRect(); // force reflow so the position change transitions
+  packet.style.left = `${pos.x}px`;
+  packet.style.top = `${pos.y}px`;
+
+  await sleep(flightMs);
+  packet.remove();
+
+  const box = nodeBoxEls[ev.node_id];
+  if (!box) return;
+
+  box.classList.remove("pulse-success", "pulse-fail");
+  void box.offsetWidth; // restart the pulse animation even on repeat outcomes
+  box.classList.add(ev.success ? "pulse-success" : "pulse-fail");
+
+  const trustLabel = box.querySelector(".node-trust");
+  if (ev.trust_after != null) trustLabel.textContent = `τ=${ev.trust_after.toFixed(2)}`;
+
+  box.classList.remove("trusted", "suspicious", "quarantined");
+  box.classList.add(nodeStateClass(ev.trust_after ?? 0, ev.quarantined));
+
+  if (ev.quarantined && !box.querySelector(".quarantine-badge")) {
+    const badge = document.createElement("div");
+    badge.className = "quarantine-badge";
+    box.appendChild(badge);
+  }
+}
+
+async function playTrace(events, positions, hubPos, nodeBoxEls, container) {
+  const total = events.length;
+  let dispatched = 0;
+  let successes = 0;
+  const quarantined = new Set();
+
+  const taskStat = document.getElementById("stat-task");
+  const successStat = document.getElementById("stat-success");
+  const quarantinedStat = document.getElementById("stat-quarantined");
+  const speedSelect = document.getElementById("live_speed");
+
+  for (const ev of events) {
+    const flightMs = Number(speedSelect.value); // read live so mid-playback speed changes apply
+    if (ev.node_id) {
+      dispatched += 1;
+      if (ev.success) successes += 1;
+      await animatePacket(ev, positions, hubPos, nodeBoxEls, container, flightMs);
+      if (ev.quarantined) quarantined.add(ev.node_id);
+    } else {
+      await sleep(flightMs); // no eligible node -- still pace the stalled step visibly
+    }
+
+    taskStat.textContent = `${ev.task_index + 1} / ${total}`;
+    successStat.textContent = dispatched ? fmtPct(successes / dispatched) : "—";
+    quarantinedStat.textContent = String(quarantined.size);
+  }
+}
+
+async function runLiveSimulation(event) {
+  event.preventDefault();
+  const statusEl = document.getElementById("live-status");
+  const runBtn = document.getElementById("live-run-btn");
+  const resultsEl = document.getElementById("simulate-results");
+  const statsEl = document.getElementById("live-stats");
+  const container = document.getElementById("network-viz");
+
+  const params = {
+    n_nodes: Number(document.getElementById("live_n_nodes").value),
+    n_tasks: Number(document.getElementById("live_n_tasks").value),
+    malicious_fraction: Number(document.getElementById("live_malicious_pct").value) / 100,
+    tau_threshold: Number(document.getElementById("live_tau_threshold").value),
     seed: Math.floor(Math.random() * 1e6),
   };
 
   runBtn.disabled = true;
   statusEl.hidden = false;
   statusEl.classList.remove("error");
-  statusEl.textContent = "Running simulation...";
+  statusEl.textContent = "Starting live run...";
+  statsEl.hidden = false;
   resultsEl.hidden = true;
 
   try {
-    const data = await fetchJSON("/simulate", {
+    const tracePromise = fetchJSON("/simulate/live", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(params),
     });
-    renderResultsTable(data);
-    renderCdfChart(data);
-    renderEdpChart(data);
-    resultsEl.hidden = false;
+    const comparisonPromise = fetchJSON("/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+
+    const traceData = await tracePromise;
     statusEl.hidden = true;
+
+    const { positions, nodeBoxEls, hubPos } = layoutNodes(traceData.nodes);
+    const playPromise = playTrace(traceData.events, positions, hubPos, nodeBoxEls, container);
+
+    const [comparisonData] = await Promise.all([comparisonPromise, playPromise]);
+
+    renderResultsTable(comparisonData);
+    renderCdfChart(comparisonData);
+    renderEdpChart(comparisonData);
+    resultsEl.hidden = false;
   } catch (err) {
-    statusEl.textContent = `Failed to reach the simulator API: ${err.message}. The backend may be waking up (Railway free tier sleeps when idle) -- try again in a few seconds.`;
+    statusEl.hidden = false;
     statusEl.classList.add("error");
+    statusEl.textContent = `Failed to reach the simulator API: ${err.message}. The backend may be waking up (Railway free tier sleeps when idle) -- try again in a few seconds.`;
   } finally {
     runBtn.disabled = false;
   }
@@ -224,7 +362,7 @@ async function loadSaturation() {
   }
 }
 
-document.getElementById("simulate-form").addEventListener("submit", runSimulation);
+document.getElementById("live-form").addEventListener("submit", runLiveSimulation);
 document.getElementById("threshold-rerun").addEventListener("click", loadThresholdSensitivity);
 document.getElementById("saturation-rerun").addEventListener("click", loadSaturation);
 

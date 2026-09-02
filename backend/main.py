@@ -68,7 +68,7 @@ class SimulateRequest(BaseModel):
 class LiveSimulateRequest(BaseModel):
     n_nodes: int = Field(default=20, ge=6, le=36)
     n_tasks: int = Field(default=300, ge=10, le=1500)
-    malicious_fraction: float = Field(default=0.15, ge=0.0, le=1.0)
+    malicious_fraction: float = Field(default=0.20, ge=0.0, le=1.0)
     tau_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
     seed: int = Field(default=42)
 
