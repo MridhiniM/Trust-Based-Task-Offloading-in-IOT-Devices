@@ -141,8 +141,43 @@ def run_trust_based(
     nodes = build_node_population(
         n_nodes, malicious_fraction, whitewashing_fraction, resource_exhaustion_fraction, seed=seed
     )
-    orchestrator = TrustOrchestrator(nodes, tau_threshold=tau_threshold)
+    orchestrator = TrustOrchestrator(nodes, tau_threshold=tau_threshold, rng=random.Random(seed))
     return run_simulation(orchestrator, n_tasks, workload_seed=seed)
+
+
+def run_trust_based_traced(
+    n_nodes: int,
+    n_tasks: int,
+    malicious_fraction: float = 0.15,
+    tau_threshold: float = trust_mod.QUARANTINE_CUTOFF,
+    seed: int | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Like run_trust_based, but returns a per-task event trace (which node
+    was dispatched to, the outcome, and that node's resulting trust/
+    quarantine state) instead of only aggregate metrics -- used to drive the
+    live animated network diagram on the demo frontend.
+    """
+    nodes = build_node_population(n_nodes, malicious_fraction, seed=seed)
+    node_summaries = [{"node_id": n.node_id, "initial_trust": n.trust_score} for n in nodes]
+    node_by_id = {n.node_id: n for n in nodes}
+
+    orchestrator = TrustOrchestrator(nodes, tau_threshold=tau_threshold, rng=random.Random(seed))
+    events = []
+    for i in range(n_tasks):
+        result = orchestrator.dispatch()
+        node = node_by_id.get(result.node_id) if result.node_id else None
+        events.append(
+            {
+                "task_index": i,
+                "node_id": result.node_id,
+                "success": result.success,
+                "latency_ms": result.latency_ms,
+                "trust_after": node.trust_score if node else None,
+                "quarantined": node.quarantined if node else False,
+            }
+        )
+
+    return node_summaries, events
 
 
 def run_baseline(

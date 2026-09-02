@@ -44,10 +44,14 @@ inventing numbers and passing them off as the paper's, here's exactly what was f
   `U_i = 0.6 * trust_i + 0.4 * resource_fit_i`, where `resource_fit_i` blends normalized CPU
   headroom and inverse latency. See `trust_offload/orchestrator.py`.
 - **Node selection policy:** each dispatch is a *utility-weighted random choice* among
-  eligible nodes, not a strict argmax. A strict argmax was tried first and made almost the
-  entire 10,000-task workload land on a single top-ranked node -- unrealistic, and it made
-  the trust threshold irrelevant to the outcome. Weighted-random selection spreads load
-  roughly the way a real scheduler would.
+  eligible nodes (`TrustOrchestrator.dispatch()` in `trust_offload/orchestrator.py`), not a
+  strict argmax. A strict argmax was tried first and made almost the entire 10,000-task
+  workload land on a single top-ranked node regardless of how many other nodes were
+  eligible -- unrealistic, and it made the trust threshold nearly irrelevant to the outcome
+  (see the correction note under "Honest results" below; this was caught late, after it had
+  already produced misleadingly clean-looking results). Weighted-random selection spreads
+  load roughly the way a real scheduler would. `select_node()` (strict argmax) is kept as a
+  separate method for tests that need a deterministic "best node" check.
 - **Malicious/whitewashing/resource-exhaustion behavior parameters** (drop-rate ranges,
   whitewashing phase length): the paper's threat model (Sec. IV) is qualitative; Table I only
   pins down the plain-malicious drop rate (70-80%). The other profiles' specific numbers are
@@ -59,32 +63,49 @@ inventing numbers and passing them off as the paper's, here's exactly what was f
 
 ## Honest results
 
+**Correction (2026-09-03):** an earlier version of this README reported results produced under
+a node-selection bug: `dispatch()` called a strict-argmax `select_node()` instead of the
+weighted-random policy described above and below. In practice this meant one or two
+top-ranked nodes absorbed nearly all traffic for the entire run, so misbehaving nodes rarely
+got dispatched to at all -- the framework looked *more* robust than it actually is, and the
+trust threshold barely mattered (Experiment A came out as a flat line). The bug was caught
+while building an animated visualization of per-task dispatches, where the same 2-3 node IDs
+lighting up on every single task made the problem obvious. It's fixed now (`dispatch()`
+actually uses weighted-random selection), and every number below reflects the corrected code.
+This is left in rather than quietly edited away because catching your own bugs is part of
+"honest simulation," not a footnote.
+
 Running `python experiments/run_all.py` (N=100 nodes, 10,000 tasks, 10% malicious, seed=42):
 
 | Metric | Trust-Based | Random Baseline |
 |---|---|---|
-| Overall success rate | 98.8% | 89.5% |
-| Average latency | 8.2 ms | 11.2 ms |
-| Tasks failed | 118 | 1,055 (88.8% more) |
-| Normalized EDP | 0.67 | 1.00 |
+| Overall success rate | 95.3% | 89.5% |
+| Average latency | 9.9 ms | 11.2 ms |
+| Tasks failed | 471 | 1,055 (55.4% fewer) |
+| Normalized EDP | 0.83 | 1.00 |
 
-Directionally this matches the paper: trust-based clearly wins on success rate, latency, and
-energy. The exact numbers differ from the paper's (96.2%/74.1%, 15.0ms/43.5ms, EDP 0.38) --
-expected, since neither the RNG seed nor several parameters above are specified precisely
-enough to reproduce exactly.
+Directionally this still matches the paper: trust-based wins on success rate, latency, and
+energy, just by smaller margins than before the fix -- expected, since letting misbehaving
+nodes actually receive their proportional share of traffic (instead of almost never being
+picked) means they now do real, if bounded, damage before quarantine kicks in. The exact
+numbers differ from the paper's (96.2%/74.1%, 15.0ms/43.5ms, EDP 0.38); neither the RNG seed
+nor several parameters above are specified precisely enough to reproduce exactly.
 
-**Experiment A came out differently in shape, and that's worth explaining rather than
-hiding.** The paper shows a symmetric bell curve peaking near tau=0.55. This simulation
-instead shows a wide flat plateau (~99% success) from tau=0.0 up to about tau=0.94, then a
-sharp cliff to 0% by tau=0.96. The reason: the asymmetric penalty (-0.045 per failure vs.
-+0.025 per success) is aggressive enough that a misbehaving node's trust collapses within
-roughly a dozen tasks *regardless* of where the threshold is set in the 0-0.9 range -- so the
-exact cutoff barely matters there. The only place the threshold *does* matter is once it's
-pushed above the trust ceiling that real hardware can reach, at which point the eligible
-node pool collapses and tasks have nowhere to go. That's arguably a more useful finding than
-the paper's stylized curve: it says the system is robust to threshold misconfiguration across
-a wide practical range, and only becomes fragile if you set the threshold unrealistically
-high. See `experiments/exp_a_threshold_sensitivity.py` for the sweep and plot.
+**Experiment A now shows real threshold sensitivity, not a flat line.** Success rate rises
+gradually from 95.3% at tau=0.0 to 98.6% at tau=0.95 -- a low threshold now measurably costs
+you, because weighted-random selection means a misbehaving node keeps getting *some* traffic
+for as long as it stays eligible, not just a brief window before an argmax simply stops
+picking it. Above tau=0.95 there's still a sharp cliff to 0%, once the threshold exceeds the
+trust ceiling real hardware can reach and the eligible pool collapses. It's still not the
+paper's symmetric bell curve (nothing in this model penalizes a threshold for being merely
+*strict*, only for excluding literally everyone), but it's now a genuine monotonic-plus-cliff
+story instead of an artifact of a selection bug. See `experiments/exp_a_threshold_sensitivity.py`.
+
+**Experiment D's resilience curve is more believable now too:** trust-based and baseline start
+close together at 0% malicious (96.0% vs 96.1%) and diverge as malicious saturation rises, with
+trust-based ahead by about 13 points at 50% malicious (73.2% vs 59.9%) -- a real, gradually
+widening advantage, rather than the suspiciously flat ~98.6%-regardless-of-saturation line the
+bug produced.
 
 ## Project layout
 

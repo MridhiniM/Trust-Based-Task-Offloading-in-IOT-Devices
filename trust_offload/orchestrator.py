@@ -18,7 +18,8 @@ design choice, not a value taken from the paper.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, field
 
 from . import trust as trust_mod
 from .node import EdgeNode
@@ -34,9 +35,15 @@ class DispatchResult:
 
 
 class TrustOrchestrator:
-    def __init__(self, nodes: list[EdgeNode], tau_threshold: float = trust_mod.QUARANTINE_CUTOFF):
+    def __init__(
+        self,
+        nodes: list[EdgeNode],
+        tau_threshold: float = trust_mod.QUARANTINE_CUTOFF,
+        rng: random.Random | None = None,
+    ):
         self.nodes = nodes
         self.tau_threshold = tau_threshold
+        self.rng = rng or random.Random()
 
     def _eligible_nodes(self) -> list[EdgeNode]:
         # Stage 3a: filter out quarantined nodes and anything below threshold.
@@ -48,14 +55,32 @@ class TrustOrchestrator:
         return UTILITY_TRUST_WEIGHT * node.trust_score + (1 - UTILITY_TRUST_WEIGHT) * resource_fit
 
     def select_node(self) -> EdgeNode | None:
+        """Deterministic top-ranked eligible node (argmax over utility)."""
         candidates = self._eligible_nodes()
         if not candidates:
             return None
         return max(candidates, key=self._utility)
 
+    def _select_node_weighted(self) -> EdgeNode | None:
+        """Utility-weighted random pick among eligible nodes -- the actual
+        dispatch policy. A strict argmax (select_node()) was tried first and
+        concentrated nearly all traffic onto a single top-ranked node
+        regardless of how many other nodes were eligible, which made the
+        trust threshold irrelevant to the outcome (see README's "honest
+        results" discussion). Weighted-random spreads load roughly the way a
+        real scheduler would, while still favoring higher-utility nodes.
+        """
+        candidates = self._eligible_nodes()
+        if not candidates:
+            return None
+        weights = [self._utility(n) for n in candidates]
+        if sum(weights) <= 0:
+            return self.rng.choice(candidates)
+        return self.rng.choices(candidates, weights=weights, k=1)[0]
+
     def dispatch(self) -> DispatchResult:
         """Selects a node for one task and runs it (Stages 1-4 for one task)."""
-        node = self.select_node()
+        node = self._select_node_weighted()
         if node is None:
             # No trustworthy node available -- task cannot be safely offloaded.
             return DispatchResult(node_id=None, success=False, latency_ms=0.0)

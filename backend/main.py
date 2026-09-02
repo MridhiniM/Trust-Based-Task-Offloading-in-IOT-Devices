@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from trust_offload.simulator import run_baseline, run_trust_based
+from trust_offload.simulator import run_baseline, run_trust_based, run_trust_based_traced
 
 app = FastAPI(title="TBTOF Demo API")
 
@@ -65,6 +65,14 @@ class SimulateRequest(BaseModel):
     seed: int = Field(default=42)
 
 
+class LiveSimulateRequest(BaseModel):
+    n_nodes: int = Field(default=20, ge=6, le=36)
+    n_tasks: int = Field(default=300, ge=10, le=1500)
+    malicious_fraction: float = Field(default=0.15, ge=0.0, le=1.0)
+    tau_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    seed: int = Field(default=42)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -100,6 +108,21 @@ def simulate(req: SimulateRequest):
         "trust_based": {**shape_result(trust_result), "edp_normalized": trust_result.edp / baseline_edp},
         "baseline": {**shape_result(baseline_result), "edp_normalized": 1.0},
     }
+
+
+@app.post("/simulate/live")
+def simulate_live(req: LiveSimulateRequest):
+    n_nodes = clamp(req.n_nodes, 6, 36)
+    n_tasks = clamp(req.n_tasks, 10, 1500)
+
+    nodes, events = run_trust_based_traced(
+        n_nodes=n_nodes,
+        n_tasks=n_tasks,
+        malicious_fraction=req.malicious_fraction,
+        tau_threshold=req.tau_threshold,
+        seed=req.seed,
+    )
+    return {"nodes": nodes, "events": events}
 
 
 @app.get("/experiments/threshold-sensitivity")
