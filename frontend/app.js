@@ -1,8 +1,8 @@
 const API_BASE_URL = "https://trust-offload-api-production.up.railway.app";
 
 const CHART_COLORS = {
-  trust: "#5b9dff",
-  baseline: "#ff6b6b",
+  trust: "#e2a03f",
+  baseline: "#cf5d45",
 };
 
 // Mirrors trust_offload/trust.py's TRUSTED_CUTOFF / QUARANTINE_CUTOFF.
