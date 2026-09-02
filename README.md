@@ -1,10 +1,13 @@
 # Trust-Based Task Offloading Framework (TBTOF)
 
 **[Live interactive demo →](https://trust-based-task-offloading-in-iot-devices-mridhini.vercel.app)** (frontend on Vercel, simulator API on Railway — the demo runs the actual simulator live, nothing is precomputed)
+**[Read the paper (PDF) →](paper/Trust-Based-Task-Offloading-Framework.pdf)**
 
 A working implementation of the trust engine, orchestrator, and simulator described in
 *"Trust-Based Task Offloading Framework for Edge-Based IoT Systems"* (Anitha H.M., Nalina V.,
-Madhusudan, Shakthi, S.P.). It scores edge nodes on task success rate, CPU availability,
+Madhusudan, Shakthi, S.P.) — included in this repo at
+[`paper/Trust-Based-Task-Offloading-Framework.pdf`](paper/Trust-Based-Task-Offloading-Framework.pdf).
+It scores edge nodes on task success rate, CPU availability,
 response latency, and historical uptime; adapts trust asymmetrically after every task
 (small reward, larger penalty); and permanently quarantines nodes that fall below a trust
 threshold -- all validated against a discrete-time Markov chain model and benchmarked
